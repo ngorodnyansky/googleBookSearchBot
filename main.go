@@ -3,45 +3,120 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func startCommand(bot *tgbotapi.BotAPI, chatId int64) {
+var managementKeyboard = tgbotapi.NewInlineKeyboardMarkup(
+	tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("<<", "previous"),
+		tgbotapi.NewInlineKeyboardButtonData(">>", "next"),
+	),
+)
+
+func startCommand(bot *tgbotapi.BotAPI, chatID int64) {
 	startMessage := "Введите текст по которому необходимо сделать поиск в Google Books:"
-	sendMessage(bot, chatId, startMessage)
+	sendMessage(bot, chatID, startMessage)
 }
 
-func helpCommand(bot *tgbotapi.BotAPI, chatId int64) {
+func helpCommand(bot *tgbotapi.BotAPI, chatID int64) {
 	helpMessage := "Этот бот делает запрос по введённому тексту в Goole книги и возвращает полученный результат. Присто напишите текст по которому хотите сделать поиск."
-	sendMessage(bot, chatId, helpMessage)
+	sendMessage(bot, chatID, helpMessage)
 }
 
-func defaultCommand(bot *tgbotapi.BotAPI, chatId int64) {
+func defaultCommand(bot *tgbotapi.BotAPI, chatID int64) {
 	defaultMessage := "Извините, такая команда не поддерживается."
-	sendMessage(bot, chatId, defaultMessage)
+	sendMessage(bot, chatID, defaultMessage)
 }
 
-func sendMessage(bot *tgbotapi.BotAPI, chatId int64, message string) {
-	msg := tgbotapi.NewMessage(chatId, message)
+func sendMessage(bot *tgbotapi.BotAPI, chatID int64, message string) {
+	msg := tgbotapi.NewMessage(chatID, message)
 	bot.Send(msg)
 }
 
-func sendPhoto(bot *tgbotapi.BotAPI, chatId int64, photo []byte) {
-	msg := tgbotapi.NewPhoto(chatId, tgbotapi.FileBytes{
-		Name:  "image",
-		Bytes: photo,
-	})
-	bot.Send(msg)
+func newPhotoCaption(books BookView) string {
+	index := books.ViewIndex
+	book := books.Books.Items[index]
+	return fmt.Sprintf(
+		"Результаты поиска:\nКнига: %s\nСписок авторов: %s\nРейтинг: %.1f\n[%d/%d]",
+		book.VolmeInfo.Titile,
+		book.VolmeInfo.Authors,
+		book.VolmeInfo.AverageRating,
+		index+1,
+		len(books.Books.Items),
+	)
 }
 
-func handleText(bot *tgbotapi.BotAPI, chatId int64, message string) {
-	books := request(message)
-	if len(books.Items[0].VolmeInfo.ImageLinks.ThubnailImageBytes) != 0 {
-		sendPhoto(bot, chatId, books.Items[0].VolmeInfo.ImageLinks.ThubnailImageBytes)
+func getImage(imageInBytes []byte) []byte {
+	if len(imageInBytes) == 0 {
+		image, _ := os.ReadFile("image_not_found.png")
+		return image
 	}
-	msg := fmt.Sprintf("Книга: %s\nСписок авторов: %s\nРейтинг: %.1f", books.Items[0].VolmeInfo.Titile, books.Items[0].VolmeInfo.Authors, books.Items[0].VolmeInfo.AverageRating)
-	sendMessage(bot, chatId, "Результаты поиска: \n"+msg)
+	return imageInBytes
+}
+
+func handleText(bot *tgbotapi.BotAPI, chatID int64, message string, booksMap map[int64]BookView) {
+	booksResp := request(message)
+	if len(booksResp.Items) != 0 {
+		var books BookView
+		books.Books = booksResp
+		books.ViewIndex = 0
+		booksMap[chatID] = books
+
+		photoConfig := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
+			Name:  "image",
+			Bytes: getImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks.ThubnailImageBytes),
+		})
+		photoConfig.Caption = newPhotoCaption(books)
+		photoConfig.ReplyMarkup = managementKeyboard
+		bot.Send(photoConfig)
+	} else {
+		bot.Send(tgbotapi.NewMessage(chatID, "По вашему запросу ничего не найдено"))
+	}
+}
+
+func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, booksMap map[int64]BookView) {
+	chatID := callback.Message.Chat.ID
+	messageID := callback.Message.MessageID
+	data := callback.Data
+
+	books, ok := booksMap[chatID]
+	if !ok {
+		return
+	}
+
+	switch data {
+	case "next":
+		if books.ViewIndex+1 == len(books.Books.Items) {
+			books.ViewIndex = 0
+		} else {
+			books.ViewIndex += 1
+		}
+	case "previous":
+		if books.ViewIndex == 0 {
+			books.ViewIndex = len(books.Books.Items) - 1
+		} else {
+			books.ViewIndex -= 1
+		}
+	}
+	booksMap[chatID] = books
+
+	deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
+	bot.Send(deleteConfig)
+
+	photoConfig := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
+		Name:  "image",
+		Bytes: getImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks.ThubnailImageBytes),
+	})
+	photoConfig.Caption = newPhotoCaption(books)
+	photoConfig.ReplyMarkup = managementKeyboard
+	bot.Send(photoConfig)
+}
+
+type BookView struct {
+	Books     GoogleBookResponce
+	ViewIndex int
 }
 
 func main() {
@@ -56,6 +131,7 @@ func main() {
 	req.Timeout = 60
 
 	updates := bot.GetUpdatesChan(req)
+	books := make(map[int64]BookView)
 	for update := range updates {
 		if update.Message != nil {
 			if update.Message.IsCommand() {
@@ -68,8 +144,11 @@ func main() {
 					defaultCommand(bot, update.Message.Chat.ID)
 				}
 			} else {
-				handleText(bot, update.Message.Chat.ID, update.Message.Text)
+				handleText(bot, update.Message.Chat.ID, update.Message.Text, books)
 			}
+		} else if update.CallbackQuery != nil {
+			handleCallback(bot, update.CallbackQuery, books)
 		}
+
 	}
 }
