@@ -70,7 +70,7 @@ func (c *Client) BookImage(links ImageLinks) ([]byte, error) {
 	} else if len(links.Thumbnail) != 0 {
 		imageLink = links.Thumbnail
 	} else {
-		notFoundImg, err := os.ReadFile("./image_not_found.png")
+		notFoundImg, err := os.ReadFile("images/image_not_found.png")
 		if err != nil {
 			return []byte{}, fmt.Errorf("can't read image_not_found.png: %w", err)
 		}
