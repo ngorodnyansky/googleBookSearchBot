@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"google-book-search-bot/clients/googleBook"
 	"log"
 	"os"
 
@@ -48,42 +49,49 @@ func newPhotoCaption(books BookView) string {
 	)
 }
 
-func getImage(imageInBytes []byte) []byte {
-	if len(imageInBytes) == 0 {
-		image, _ := os.ReadFile("image_not_found.png")
-		return image
+func handleText(bot *tgbotapi.BotAPI, chatID int64, message string, booksMap map[int64]BookView, client googleBook.Client) error {
+	booksResp, err := client.Books(message)
+	if err != nil {
+		return fmt.Errorf("books getting error: %w", err)
 	}
-	return imageInBytes
-}
-
-func handleText(bot *tgbotapi.BotAPI, chatID int64, message string, booksMap map[int64]BookView) {
-	booksResp := request(message)
 	if len(booksResp.Items) != 0 {
 		var books BookView
 		books.Books = booksResp
 		books.ViewIndex = 0
 		booksMap[chatID] = books
 
+		photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks)
+		if err != nil {
+			return fmt.Errorf("photo getting error: %w", err)
+		}
 		photoConfig := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
 			Name:  "image",
-			Bytes: getImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks.ThubnailImageBytes),
+			Bytes: photo,
 		})
 		photoConfig.Caption = newPhotoCaption(books)
 		photoConfig.ReplyMarkup = managementKeyboard
-		bot.Send(photoConfig)
+		_, err = bot.Send(photoConfig)
+		if err != nil {
+			return fmt.Errorf("send message error: %w", err)
+		}
 	} else {
-		bot.Send(tgbotapi.NewMessage(chatID, "По вашему запросу ничего не найдено"))
+		_, err = bot.Send(tgbotapi.NewMessage(chatID, "По вашему запросу ничего не найдено"))
+		if err != nil {
+			return fmt.Errorf("send message error: %w", err)
+		}
 	}
+
+	return nil
 }
 
-func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, booksMap map[int64]BookView) {
+func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, booksMap map[int64]BookView, client googleBook.Client) error {
 	chatID := callback.Message.Chat.ID
 	messageID := callback.Message.MessageID
 	data := callback.Data
 
 	books, ok := booksMap[chatID]
 	if !ok {
-		return
+		return fmt.Errorf("cant find books")
 	}
 
 	switch data {
@@ -105,17 +113,26 @@ func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, book
 	deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
 	bot.Send(deleteConfig)
 
+	photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks)
+	if err != nil {
+		return fmt.Errorf("photo getting error: %w", err)
+	}
 	photoConfig := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
 		Name:  "image",
-		Bytes: getImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks.ThubnailImageBytes),
+		Bytes: photo,
 	})
 	photoConfig.Caption = newPhotoCaption(books)
 	photoConfig.ReplyMarkup = managementKeyboard
-	bot.Send(photoConfig)
+	_, err = bot.Send(photoConfig)
+	if err != nil {
+		return fmt.Errorf("send message error: %w", err)
+	}
+
+	return nil
 }
 
 type BookView struct {
-	Books     GoogleBookResponce
+	Books     googleBook.GoogleBookResponce
 	ViewIndex int
 }
 
@@ -135,6 +152,7 @@ func main() {
 	req.Timeout = 60
 
 	updates := bot.GetUpdatesChan(req)
+	googleBooksClient := googleBook.New("https://www.googleapis.com/books")
 	books := make(map[int64]BookView)
 	for update := range updates {
 		if update.Message != nil {
@@ -148,10 +166,10 @@ func main() {
 					defaultCommand(bot, update.Message.Chat.ID)
 				}
 			} else {
-				handleText(bot, update.Message.Chat.ID, update.Message.Text, books)
+				handleText(bot, update.Message.Chat.ID, update.Message.Text, books, googleBooksClient)
 			}
 		} else if update.CallbackQuery != nil {
-			handleCallback(bot, update.CallbackQuery, books)
+			handleCallback(bot, update.CallbackQuery, books, googleBooksClient)
 		}
 
 	}
