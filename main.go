@@ -120,7 +120,11 @@ type BookView struct {
 }
 
 func main() {
-	bot, err := tgbotapi.NewBotAPI("TOKEN")
+	args := os.Args
+	if len(args) < 2 {
+		log.Fatal("Не передан токен для подклчения к боту. Передайте его первым аргументом командной строки.")
+	}
+	bot, err := tgbotapi.NewBotAPI(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
