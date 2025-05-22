@@ -110,22 +110,25 @@ func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, book
 	}
 	booksMap[chatID] = books
 
-	deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
-	bot.Send(deleteConfig)
-
 	photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks)
 	if err != nil {
 		return fmt.Errorf("photo getting error: %w", err)
 	}
-	photoConfig := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
-		Name:  "image",
-		Bytes: photo,
-	})
-	photoConfig.Caption = newPhotoCaption(books)
-	photoConfig.ReplyMarkup = managementKeyboard
-	_, err = bot.Send(photoConfig)
+
+	newPhoto := tgbotapi.NewInputMediaPhoto(tgbotapi.FileBytes{Name: "imageg", Bytes: photo})
+	newPhoto.Caption = newPhotoCaption(books)
+	edit := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Media: newPhoto,
+	}
+	edit.ReplyMarkup = &managementKeyboard
+
+	_, err = bot.Send(edit)
 	if err != nil {
-		return fmt.Errorf("send message error: %w", err)
+		return fmt.Errorf("photo sendong error: %w", err)
 	}
 
 	return nil
