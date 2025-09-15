@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -36,12 +37,18 @@ func (c *Client) Books(searchMsg string) (GoogleBookResponce, error) {
 	params.Add("q", searchMsg)
 
 	req.URL.RawQuery = params.Encode()
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return GoogleBookResponce{}, fmt.Errorf("can't do request: %w", err)
 	}
 
 	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return GoogleBookResponce{}, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
