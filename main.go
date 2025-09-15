@@ -44,9 +44,9 @@ func newPhotoCaption(books BookView) string {
 	book := books.Books.Items[index]
 	return fmt.Sprintf(
 		"Результаты поиска:\nКнига: %s\nСписок авторов: %s\nРейтинг: %.1f\n[%d/%d]",
-		book.VolmeInfo.Titile,
-		book.VolmeInfo.Authors,
-		book.VolmeInfo.AverageRating,
+		book.VolumeInfo.Title,
+		book.VolumeInfo.Authors,
+		book.VolumeInfo.AverageRating,
 		index+1,
 		len(books.Books.Items),
 	)
@@ -63,7 +63,7 @@ func handleText(bot *tgbotapi.BotAPI, chatID int64, message string, booksMap map
 		books.ViewIndex = 0
 		booksMap[chatID] = books
 
-		photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks)
+		photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolumeInfo.ImageLinks)
 		if err != nil {
 			return fmt.Errorf("photo getting error: %w", err)
 		}
@@ -113,7 +113,7 @@ func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, book
 	}
 	booksMap[chatID] = books
 
-	photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolmeInfo.ImageLinks)
+	photo, err := client.BookImage(books.Books.Items[books.ViewIndex].VolumeInfo.ImageLinks)
 	if err != nil {
 		return fmt.Errorf("photo getting error: %w", err)
 	}
@@ -138,7 +138,7 @@ func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery, book
 }
 
 type BookView struct {
-	Books     googleBook.GoogleBookResponce
+	Books     googleBook.GoogleBookResponse
 	ViewIndex int
 }
 

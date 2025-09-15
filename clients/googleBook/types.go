@@ -1,19 +1,19 @@
 package googleBook
 
-type GoogleBookResponce struct {
-	Kind       string  `json:"kind"`
-	TotalItems int     `json:"totalItems"`
-	Items      []Items `json:"items"`
+type GoogleBookResponse struct {
+	Kind       string `json:"kind"`
+	TotalItems int    `json:"totalItems"`
+	Items      []Item `json:"items"`
 }
 
-type Items struct {
-	Kind      string    `json:"kind"`
-	SelfLink  string    `json:"selfLink"`
-	VolmeInfo VolmeInfo `json:"volumeInfo"`
+type Item struct {
+	Kind       string     `json:"kind"`
+	SelfLink   string     `json:"selfLink"`
+	VolumeInfo VolumeInfo `json:"volumeInfo"`
 }
 
-type VolmeInfo struct {
-	Titile        string     `json:"title"`
+type VolumeInfo struct {
+	Title         string     `json:"title"`
 	Subtitle      string     `json:"subtitle"`
 	Authors       []string   `json:"authors"`
 	Description   string     `json:"description"`

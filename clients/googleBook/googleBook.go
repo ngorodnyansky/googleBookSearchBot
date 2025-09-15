@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+const (
+	GoogleBooksAPIHost     = "https://www.googleapis.com"
+	GoogleBooksAPIBasePath = "/v1/volumes"
+	ImageNotFoundPath      = "images/image_not_found.png"
+)
+
 type Client struct {
 	host     string
 	basePath string
@@ -18,19 +24,22 @@ type Client struct {
 }
 
 func New(host string) Client {
+	if host == "" {
+		host = GoogleBooksAPIHost
+	}
 	return Client{
 		host:     host,
-		basePath: "/v1/volumes",
+		basePath: GoogleBooksAPIBasePath,
 		client: http.Client{
 			Timeout: 5 * time.Second,
 		},
 	}
 }
 
-func (c *Client) Books(searchMsg string) (GoogleBookResponce, error) {
+func (c *Client) Books(searchMsg string) (GoogleBookResponse, error) {
 	req, err := http.NewRequest(http.MethodGet, c.host+c.basePath, nil)
 	if err != nil {
-		return GoogleBookResponce{}, fmt.Errorf("can't create request: %w", err)
+		return GoogleBookResponse{}, fmt.Errorf("can't create request to %s: %w", c.host+c.basePath, err)
 	}
 
 	params := url.Values{}
@@ -40,29 +49,29 @@ func (c *Client) Books(searchMsg string) (GoogleBookResponce, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return GoogleBookResponce{}, fmt.Errorf("can't do request: %w", err)
+		return GoogleBookResponse{}, fmt.Errorf("can't do request: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return GoogleBookResponce{}, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		return GoogleBookResponse{}, fmt.Errorf("unexpected status code %d from %s: %s", resp.StatusCode, req.URL.String(), strings.TrimSpace(string(snippet)))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return GoogleBookResponce{}, fmt.Errorf("can't read responce body: %w", err)
+		return GoogleBookResponse{}, fmt.Errorf("failed to read response body from %s: %w", req.URL.String(), err)
 	}
 
-	var googleResponce GoogleBookResponce
+	var googleResponce GoogleBookResponse
 	if json.Valid(body) {
 		err = json.Unmarshal(body, &googleResponce)
 		if err != nil {
-			return GoogleBookResponce{}, fmt.Errorf("json unmarshall error: %w", err)
+			return GoogleBookResponse{}, fmt.Errorf("json unmarshall error: %w", err)
 		}
 	} else {
-		return GoogleBookResponce{}, fmt.Errorf("invalid json response")
+		return GoogleBookResponse{}, fmt.Errorf("invalid JSON response from %s", req.URL.String())
 	}
 
 	return googleResponce, nil
@@ -77,7 +86,7 @@ func (c *Client) BookImage(links ImageLinks) ([]byte, error) {
 	} else if len(links.Thumbnail) != 0 {
 		imageLink = links.Thumbnail
 	} else {
-		notFoundImg, err := os.ReadFile("images/image_not_found.png")
+		notFoundImg, err := os.ReadFile(ImageNotFoundPath)
 		if err != nil {
 			return []byte{}, fmt.Errorf("can't read image_not_found.png: %w", err)
 		}
