@@ -55,7 +55,7 @@ func (c *Client) Books(searchMsg string) (GoogleBookResponce, error) {
 			return GoogleBookResponce{}, fmt.Errorf("json unmarshall error: %w", err)
 		}
 	} else {
-		return GoogleBookResponce{}, fmt.Errorf("invalid json: %w", err)
+		return GoogleBookResponce{}, fmt.Errorf("invalid json response")
 	}
 
 	return googleResponce, nil
