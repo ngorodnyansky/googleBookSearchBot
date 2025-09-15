@@ -16,24 +16,27 @@ var managementKeyboard = tgbotapi.NewInlineKeyboardMarkup(
 	),
 )
 
-func startCommand(bot *tgbotapi.BotAPI, chatID int64) {
+func startCommand(bot *tgbotapi.BotAPI, chatID int64) error {
 	startMessage := "Введите текст по которому необходимо сделать поиск в Google Books:"
-	sendMessage(bot, chatID, startMessage)
+	return sendMessage(bot, chatID, startMessage)
 }
 
-func helpCommand(bot *tgbotapi.BotAPI, chatID int64) {
+func helpCommand(bot *tgbotapi.BotAPI, chatID int64) error {
 	helpMessage := "Этот бот делает запрос по введённому тексту в Goole книги и возвращает полученный результат. Присто напишите текст по которому хотите сделать поиск."
-	sendMessage(bot, chatID, helpMessage)
+	return sendMessage(bot, chatID, helpMessage)
 }
 
-func defaultCommand(bot *tgbotapi.BotAPI, chatID int64) {
+func defaultCommand(bot *tgbotapi.BotAPI, chatID int64) error {
 	defaultMessage := "Извините, такая команда не поддерживается."
-	sendMessage(bot, chatID, defaultMessage)
+	return sendMessage(bot, chatID, defaultMessage)
 }
 
-func sendMessage(bot *tgbotapi.BotAPI, chatID int64, message string) {
+func sendMessage(bot *tgbotapi.BotAPI, chatID int64, message string) error {
 	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+	return nil
 }
 
 func newPhotoCaption(books BookView) string {
@@ -162,17 +165,27 @@ func main() {
 			if update.Message.IsCommand() {
 				switch update.Message.Text {
 				case "/start":
-					startCommand(bot, update.Message.Chat.ID)
+					if err := startCommand(bot, update.Message.Chat.ID); err != nil {
+						log.Printf("start command error: %v", err)
+					}
 				case "/help":
-					helpCommand(bot, update.Message.Chat.ID)
+					if err := helpCommand(bot, update.Message.Chat.ID); err != nil {
+						log.Printf("help command error: %v", err)
+					}
 				default:
-					defaultCommand(bot, update.Message.Chat.ID)
+					if err := defaultCommand(bot, update.Message.Chat.ID); err != nil {
+						log.Printf("unknown command error: %v", err)
+					}
 				}
 			} else {
-				handleText(bot, update.Message.Chat.ID, update.Message.Text, books, googleBooksClient)
+				if err := handleText(bot, update.Message.Chat.ID, update.Message.Text, books, googleBooksClient); err != nil {
+					log.Printf("handle text error: %v", err)
+				}
 			}
 		} else if update.CallbackQuery != nil {
-			handleCallback(bot, update.CallbackQuery, books, googleBooksClient)
+			if err := handleCallback(bot, update.CallbackQuery, books, googleBooksClient); err != nil {
+				log.Printf("handle callback error: %v", err)
+			}
 		}
 
 	}
